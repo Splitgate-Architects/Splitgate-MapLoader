@@ -1,4 +1,4 @@
-[![YouTube Video](https://raw.githubusercontent.com/CorellanStoma/Splitgate-MapLoader/refs/heads/master/assets/Map%20Loader.png)](https://youtu.be/Gx70ZBeIltw)
+[![YouTube Video](https://raw.githubusercontent.com/CorellanStoma/Splitgate-MapLoader/refs/heads/master/assets/preview.png)](https://youtu.be/Gx70ZBeIltw)
 
 # Splitgate-MapLoader
 
