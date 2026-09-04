@@ -1,41 +1,17 @@
-# ============================================================
-#  update_manifest.ps1  (v3)
-#  Scans the MapCreator and MapCreatorPrefab folders next to
-#  this script and rebuilds CloudSaveManifest.json from their
-#  contents. Existing entries keep their FileName, OwnerId,
-#  AuthorDisplayName and CreatedAt values; only new folders
-#  get fresh defaults.
-#
-#  v2: aborts loudly instead of silently overwriting with bad
-#  data if the existing manifest can't be parsed, and always
-#  writes a timestamped backup before touching the real file.
-#
-#  v3: if a folder contains a "custom-map.json" file (with
-#  "name" and "author" fields), that file becomes the source
-#  of truth for FileName/AuthorDisplayName, and the name gets
-#  prefixed with $communityTag to mark it as non-original content.
-#
-#  v4: asks at startup whether to back up the current state into
-#  Backup/<yyyy-MM-dd>-Backup/ (MapCreator, MapCreatorPrefab, and
-#  the manifest itself), overwritten if run again the same day.
-#
-#  v5: drop new content into CustomMaps/ or CustomPrefabs/ (auto-
-#  created next to this script) instead of directly into the live
-#  MapCreator/MapCreatorPrefab folders. The script backs up the
-#  live folders first (a true "before" snapshot), then moves the
-#  staged content in, then regenerates the manifest as usual.
-#
-#  v6: guided flow in clear parts - (1) first run just creates the
-#  staging folders and stops with instructions, (2) backup prompt,
-#  (3) a Y/N loop confirming your files are actually staged before
-#  continuing, (4) import, (5) rebuild the manifest.
-# ============================================================
+# ╔════════════════════════════════════════════════════════════════════════════════════════════════════════[─]═[□]═[×]═╗ 
+# ║ Splitgate-MapLoader                                                                                                ║ 
+# ╠══════════════════════════╦═════════════════════════════════════════════════════════════════════════════════════════╣ 
+# ║ Script:                  ║ update_manifest.ps1                                                                     ║ 
+# ║ Version:                 ║ 1.0.0                                                                                   ║ 
+# ║ Author:                  ║ AI                                                                                      ║ 
+# ║ Description:             ║ Scans the MapCreator and MapCreatorPrefab folders, imports staged files safely,         ║ 
+# ║                          ║ and rebuilds the CloudSaveManifest.json so custom maps appear in the game.              ║ 
+# ╚══════════════════════════╩═════════════════════════════════════════════════════════════════════════════════════════╝ 
 
 $ErrorActionPreference = "Stop"
 
-# Prefix added to the name of any map that has a custom-map.json
-# (i.e. anything you imported rather than made yourself in-editor).
-# Change freely - e.g. "[UGC]", "[Community]", "[SGAR]"
+# Prefix added to the name of any map that has a custom-map.json. 
+# Helps identify imported/public community maps in the in-game Lab menu.
 $communityTag = "[P]"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -43,12 +19,11 @@ $manifestPath = Join-Path $root "CloudSaveManifest.json"
 $customMapsDir = Join-Path $root "CustomMaps"
 $customPrefabsDir = Join-Path $root "CustomPrefabs"
 
-# ============================================================
-#  PART 1 - First-run setup
-#  Creates the staging folders if they don't exist yet and, if
-#  this is genuinely the first run, stops here with instructions
-#  instead of doing anything else.
-# ============================================================
+
+# ╠════ PART 1: First-Run Setup ═══════════════════════════════════════════════════════════════════════════════════════╣
+# ║ Creates the staging folders if they don't exist. If this is genuinely the first run,                               ║
+# ║ the script stops here with instructions instead of executing the rest of the code.                                 ║
+# ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 $isFirstRun = -not (Test-Path $customMapsDir)
 
 if (-not (Test-Path $customMapsDir))    { New-Item -Path $customMapsDir -ItemType Directory | Out-Null }
@@ -74,9 +49,10 @@ if ($isFirstRun) {
     exit 0
 }
 
-# ============================================================
-#  PART 2 - Backup
-# ============================================================
+
+# ╠════ PART 2: Backup Process ════════════════════════════════════════════════════════════════════════════════════════╣
+# ║ Prompts the user to back up the current live folders and manifest into a timestamped directory.                    ║
+# ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 $answer = Read-Host "Do you want to back up your current MapCreator / MapCreatorPrefab folders (and the manifest) first? (Y/N)"
 if ($answer -match '^[Yy]') {
     $dateStr = Get-Date -Format "yyyy-MM-dd"
@@ -114,9 +90,10 @@ if ($answer -match '^[Yy]') {
 }
 Write-Host ""
 
-# ============================================================
-#  PART 3 - Confirm the staged content is ready, then continue
-# ============================================================
+
+# ╠════ PART 3: Staging Confirmation ══════════════════════════════════════════════════════════════════════════════════╣
+# ║ A loop that waits for user confirmation before moving files into the live directories.                             ║
+# ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 $ready = $false
 do {
     $readyAnswer = Read-Host "Are your new maps/prefabs placed inside CustomMaps / CustomPrefabs now? (Y/N)"
@@ -129,13 +106,15 @@ do {
 } while (-not $ready)
 Write-Host ""
 
+
 function Get-IsoNow {
     return (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 }
 
-# Moves everything sitting in a staging folder (CustomMaps / CustomPrefabs)
-# into the real live folder the game reads from. Merges into existing
-# FileId folders if one with the same name already exists there.
+
+# ╠════ PART 4: Import Staged Content ═════════════════════════════════════════════════════════════════════════════════╣
+# ║ Moves everything from the staging folders into the active live folders.                                            ║
+# ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 function Import-StagedContent {
     param(
         [string]$StagingDir,
@@ -172,20 +151,18 @@ function Import-StagedContent {
     }
 }
 
-# ============================================================
-#  PART 4 - Import staged content into the live folders
-# ============================================================
 Write-Host "Checking CustomMaps / CustomPrefabs for new content ..."
 Import-StagedContent -StagingDir (Join-Path $root "CustomMaps") -LiveDir (Join-Path $root "MapCreator") -Label "map"
 Import-StagedContent -StagingDir (Join-Path $root "CustomPrefabs") -LiveDir (Join-Path $root "MapCreatorPrefab") -Label "prefab"
 Write-Host ""
 
-# ============================================================
-#  PART 5 - Rebuild the manifest from the live folders
-# ============================================================
-# Windows PowerShell 5.1's ConvertTo-Json produces ugly, inconsistent
-# indentation and double spaces after colons. This reformats compact
-# JSON with clean, consistent 2-space indentation instead.
+
+# ╠════ PART 5: Rebuild Manifest ══════════════════════════════════════════════════════════════════════════════════════╣
+# ║ Parses the existing manifest, checks metadata (including custom-map.json overrides),                               ║
+# ║ generates a clean JSON structure, and overwrites the active manifest safely.                                       ║
+# ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+# Standardizes JSON formatting with 2-space indentation (avoids default PS ConvertTo-Json messiness)
 function Format-Json {
     param([string]$Json)
     $indent = 0
@@ -223,7 +200,7 @@ function Format-Json {
     return $sb.ToString()
 }
 
-# --- Load existing manifest (if present) so we can preserve metadata ---
+# --- Load existing manifest ---
 $existingById = @{}
 $manifestVersion = 1
 $hasSyncedFromBackend = $true
@@ -243,7 +220,6 @@ if (Test-Path $manifestPath) {
         exit 1
     }
 
-    # Sanity-check what we parsed before trusting it
     if ($null -eq $existing -or $null -eq $existing.Version -or $null -eq $existing.Files) {
         Write-Host ""
         Write-Host "[ABORTED] The existing manifest parsed, but is missing expected fields (Version/Files)." -ForegroundColor Red
@@ -262,7 +238,7 @@ if (Test-Path $manifestPath) {
     Write-Host "No existing manifest found, creating a new one."
 }
 
-# --- Figure out a default OwnerId from whatever already exists ---
+# --- Establish default OwnerId ---
 $defaultOwnerId = $null
 if ($existingById.Count -gt 0) {
     $defaultOwnerId = ($existingById.Values | Group-Object OwnerId | Sort-Object Count -Descending | Select-Object -First 1).Name
@@ -294,7 +270,7 @@ foreach ($contentType in $contentTypes) {
 
         $existingEntry = $existingById[$fileId]
 
-        # --- Check for a custom-map.json in this folder (name/author override) ---
+        # --- Extract JSON metadata if available ---
         $customInfo = $null
         $customJsonPath = Join-Path $folderPath "custom-map.json"
         if (Test-Path $customJsonPath) {
@@ -311,7 +287,7 @@ foreach ($contentType in $contentTypes) {
             }
         }
 
-        # --- Build the Saves array from whatever .bin files actually exist ---
+        # --- Compile save files ---
         $saves = New-Object System.Collections.Generic.List[Object]
         foreach ($bin in $binFiles) {
             $saveId = [System.IO.Path]::GetFileNameWithoutExtension($bin.Name)
@@ -334,7 +310,7 @@ foreach ($contentType in $contentTypes) {
             })
         }
 
-        # --- Reuse metadata if the entry already existed, else set defaults ---
+        # --- Apply Entry Attributes ---
         if ($existingEntry) {
             $fileName          = $existingEntry.FileName
             $ownerId           = $existingEntry.OwnerId
@@ -349,7 +325,6 @@ foreach ($contentType in $contentTypes) {
             $logPrefix         = "  NEW:    "
         }
 
-        # --- custom-map.json (if present) wins over everything above for name/author ---
         if ($customInfo) {
             $fileName = "$communityTag $($customInfo.name)"
             if ($customInfo.author) { $authorDisplayName = $customInfo.author }
@@ -370,7 +345,7 @@ foreach ($contentType in $contentTypes) {
     }
 }
 
-# --- Sanity check before overwriting anything ---
+# --- Pre-Write Safety Check ---
 if ($existingById.Count -gt 0 -and $newFiles.Count -lt ($existingById.Count / 2)) {
     Write-Host ""
     Write-Host "[ABORTED] Safety check failed: found only $($newFiles.Count) entries on disk," -ForegroundColor Red
@@ -389,7 +364,7 @@ $manifestObject = [ordered]@{
 $jsonCompact = $manifestObject | ConvertTo-Json -Depth 10 -Compress
 $json = Format-Json -Json $jsonCompact
 
-# --- Always back up the manifest before touching it (into Backup/, not loose) ---
+# --- Backup manifest securely prior to overwrite ---
 if (Test-Path $manifestPath) {
     $backupRoot = Join-Path $root "Backup"
     if (-not (Test-Path $backupRoot)) {
@@ -401,7 +376,7 @@ if (Test-Path $manifestPath) {
     Write-Host "Manifest backup written: $backupPath"
 }
 
-# Write back as UTF-16LE with BOM, matching the original file format
+# --- Final JSON Output ---
 [System.IO.File]::WriteAllText($manifestPath, $json, [System.Text.Encoding]::Unicode)
 
 Write-Host ""
