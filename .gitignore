@@ -2,9 +2,15 @@
 # ║ Custom                   ║
 # ╚══════════════════════════╝
 
-Backup/*
-MapCreator/*
-MapCreatorPrefab/*
+
+Backup/* 
+!.gitkeep
+
+MapCreator/* 
+!.gitkeep
+
+MapCreatorPrefab/* 
+!.gitkeep
 
 # ╔══════════════════════════╗
 # ║ Windows                  ║
