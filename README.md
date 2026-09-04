@@ -1,8 +1,11 @@
+[![YouTube Video](https://raw.githubusercontent.com/CorellanStoma/Splitgate-MapLoader/refs/heads/master/assets/Map%20Loader.png)](https://youtu.be/Gx70ZBeIltw)
+
 # Splitgate-MapLoader
 
 A streamlined, automated utility designed to simplify loading custom maps and prefabs into Splitgate. 
 
-> **Note:** The underlying code for this project was built with the assistance of AI, resulting in a highly functional and reliable tool.
+> [!CAUTION]
+> The underlying code for this project was built with the assistance of AI.
 
 ## Why is this script needed?
 Adding custom maps to Splitgate manually is notoriously frustrating. Simply dropping a downloaded `.bin` map file into your game directory does not work; the game relies on a strict `CloudSaveManifest.json` file to recognize and list custom content in your menus. Modifying this JSON manually is error-prone and time-consuming. 
