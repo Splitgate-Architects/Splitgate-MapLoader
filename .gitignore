@@ -2,6 +2,7 @@
 # ║ Custom                   ║
 # ╚══════════════════════════╝
 
+CloudSaveManifest.json
 
 Backup/* 
 !.gitkeep
