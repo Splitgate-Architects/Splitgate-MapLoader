@@ -2,16 +2,19 @@
 # ║ Splitgate-MapLoader                                                                                                ║ 
 # ╠══════════════════════════╦═════════════════════════════════════════════════════════════════════════════════════════╣ 
 # ║ Script:                  ║ update_manifest.ps1                                                                     ║ 
-# ║ Version:                 ║ 1.0.0                                                                                   ║ 
+# ║ Version:                 ║ 1.1.0                                                                                   ║ 
 # ║ Author:                  ║ AI                                                                                      ║ 
 # ║ Description:             ║ Scans the MapCreator and MapCreatorPrefab folders, imports staged files safely,         ║ 
 # ║                          ║ and rebuilds the CloudSaveManifest.json so custom maps appear in the game.              ║ 
+# ║                          ║ Auto-detects manifest encoding (UTF-16LE vs UTF-8) and only derives the                 ║ 
+# ║                          ║ default OwnerId from your own native maps, not imported community ones.                 ║ 
 # ╚══════════════════════════╩═════════════════════════════════════════════════════════════════════════════════════════╝ 
 
 $ErrorActionPreference = "Stop"
 
-# Prefix added to the name of any map that has a custom-map.json. 
-# Helps identify imported/public community maps in the in-game Lab menu.
+# Prefix added to the name of any map that has a custom-map.json
+# (i.e. anything you imported rather than made yourself in-editor).
+# Change freely - e.g. "[UGC]", "[Community]", "[SGAR]"
 $communityTag = "[P]"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -19,10 +22,28 @@ $manifestPath = Join-Path $root "CloudSaveManifest.json"
 $customMapsDir = Join-Path $root "CustomMaps"
 $customPrefabsDir = Join-Path $root "CustomPrefabs"
 
+# Splitgate manifests show up in the wild as either UTF-16LE with a
+# BOM, or plain UTF-8 without one. Detect which, so we read/write
+# using whatever the file actually is instead of assuming one.
+function Get-ManifestEncoding {
+    param([string]$Path)
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+        return [System.Text.Encoding]::Unicode  # UTF-16LE with BOM
+    }
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        return New-Object System.Text.UTF8Encoding($true)  # UTF-8 with BOM
+    }
+    return New-Object System.Text.UTF8Encoding($false)  # plain UTF-8, no BOM
+}
+
+# Encoding to use for a brand-new manifest (none exists yet). Plain
+# UTF-8 without BOM appears to be the game's own default format.
+$manifestEncoding = New-Object System.Text.UTF8Encoding($false)
 
 # ╠════ PART 1: First-Run Setup ═══════════════════════════════════════════════════════════════════════════════════════╣
-# ║ Creates the staging folders if they don't exist. If this is genuinely the first run,                               ║
-# ║ the script stops here with instructions instead of executing the rest of the code.                                 ║
+# ║ Creates the staging folders if they don't exist yet and, if this is genuinely                                      ║
+# ║ the first run, stops here with instructions instead of doing anything else.                                        ║
 # ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 $isFirstRun = -not (Test-Path $customMapsDir)
 
@@ -49,9 +70,9 @@ if ($isFirstRun) {
     exit 0
 }
 
-
 # ╠════ PART 2: Backup Process ════════════════════════════════════════════════════════════════════════════════════════╣
-# ║ Prompts the user to back up the current live folders and manifest into a timestamped directory.                    ║
+# ║ Prompts to back up the current live folders and manifest into a dated                                              ║
+# ║ Backup/<yyyy-MM-dd>-Backup/ folder before anything else is touched.                                                ║
 # ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 $answer = Read-Host "Do you want to back up your current MapCreator / MapCreatorPrefab folders (and the manifest) first? (Y/N)"
 if ($answer -match '^[Yy]') {
@@ -90,9 +111,9 @@ if ($answer -match '^[Yy]') {
 }
 Write-Host ""
 
-
 # ╠════ PART 3: Staging Confirmation ══════════════════════════════════════════════════════════════════════════════════╣
-# ║ A loop that waits for user confirmation before moving files into the live directories.                             ║
+# ║ A Y/N loop that waits until the user confirms new maps/prefabs are                                                 ║
+# ║ actually placed in CustomMaps / CustomPrefabs before continuing.                                                   ║
 # ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 $ready = $false
 do {
@@ -106,15 +127,13 @@ do {
 } while (-not $ready)
 Write-Host ""
 
-
 function Get-IsoNow {
     return (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
 }
 
-
-# ╠════ PART 4: Import Staged Content ═════════════════════════════════════════════════════════════════════════════════╣
-# ║ Moves everything from the staging folders into the active live folders.                                            ║
-# ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+# Moves everything sitting in a staging folder (CustomMaps / CustomPrefabs)
+# into the real live folder the game reads from. Merges into existing
+# FileId folders if one with the same name already exists there.
 function Import-StagedContent {
     param(
         [string]$StagingDir,
@@ -151,18 +170,22 @@ function Import-StagedContent {
     }
 }
 
+# ╠════ PART 4: Import Staged Content ═════════════════════════════════════════════════════════════════════════════════╣
+# ║ Moves everything from the staging folders into the live MapCreator /                                               ║
+# ║ MapCreatorPrefab folders, merging into existing FileId folders if needed.                                          ║
+# ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 Write-Host "Checking CustomMaps / CustomPrefabs for new content ..."
 Import-StagedContent -StagingDir (Join-Path $root "CustomMaps") -LiveDir (Join-Path $root "MapCreator") -Label "map"
 Import-StagedContent -StagingDir (Join-Path $root "CustomPrefabs") -LiveDir (Join-Path $root "MapCreatorPrefab") -Label "prefab"
 Write-Host ""
 
-
 # ╠════ PART 5: Rebuild Manifest ══════════════════════════════════════════════════════════════════════════════════════╣
-# ║ Parses the existing manifest, checks metadata (including custom-map.json overrides),                               ║
-# ║ generates a clean JSON structure, and overwrites the active manifest safely.                                       ║
+# ║ Parses the existing manifest (any encoding), applies custom-map.json                                               ║
+# ║ overrides, generates clean JSON, and safely overwrites the manifest.                                               ║
 # ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
-
-# Standardizes JSON formatting with 2-space indentation (avoids default PS ConvertTo-Json messiness)
+# Windows PowerShell 5.1's ConvertTo-Json produces ugly, inconsistent
+# indentation and double spaces after colons. This reformats compact
+# JSON with clean, consistent 2-space indentation instead.
 function Format-Json {
     param([string]$Json)
     $indent = 0
@@ -200,7 +223,7 @@ function Format-Json {
     return $sb.ToString()
 }
 
-# --- Load existing manifest ---
+# --- Load existing manifest (if present) so we can preserve metadata ---
 $existingById = @{}
 $manifestVersion = 1
 $hasSyncedFromBackend = $true
@@ -209,7 +232,8 @@ $existing = $null
 if (Test-Path $manifestPath) {
     Write-Host "Reading existing manifest..."
     try {
-        $raw = [System.IO.File]::ReadAllText($manifestPath, [System.Text.Encoding]::Unicode)
+        $manifestEncoding = Get-ManifestEncoding -Path $manifestPath
+        $raw = [System.IO.File]::ReadAllText($manifestPath, $manifestEncoding)
         $existing = ConvertFrom-Json -InputObject $raw
     } catch {
         Write-Host ""
@@ -220,6 +244,7 @@ if (Test-Path $manifestPath) {
         exit 1
     }
 
+    # Sanity-check what we parsed before trusting it
     if ($null -eq $existing -or $null -eq $existing.Version -or $null -eq $existing.Files) {
         Write-Host ""
         Write-Host "[ABORTED] The existing manifest parsed, but is missing expected fields (Version/Files)." -ForegroundColor Red
@@ -238,10 +263,27 @@ if (Test-Path $manifestPath) {
     Write-Host "No existing manifest found, creating a new one."
 }
 
-# --- Establish default OwnerId ---
+# --- Figure out a default OwnerId from YOUR OWN maps only ---
+# Entries that came from a custom-map.json belong to someone else
+# (that's the whole point of the tag), so they must never be used
+# to guess your own OwnerId - only folders without one count as
+# "native" maps you made yourself.
 $defaultOwnerId = $null
 if ($existingById.Count -gt 0) {
-    $defaultOwnerId = ($existingById.Values | Group-Object OwnerId | Sort-Object Count -Descending | Select-Object -First 1).Name
+    $nativeOwnerIds = @()
+    foreach ($f in $existingById.Values) {
+        $folderPath = Join-Path (Join-Path $root $f.ContentType) $f.FileId
+        $hasCustomJson = Test-Path (Join-Path $folderPath "custom-map.json")
+        if (-not $hasCustomJson) {
+            $nativeOwnerIds += $f.OwnerId
+        }
+    }
+    if ($nativeOwnerIds.Count -gt 0) {
+        $defaultOwnerId = ($nativeOwnerIds | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name
+    } else {
+        Write-Warning "Every existing entry has a custom-map.json (i.e. looks imported) - falling back to the most common OwnerId overall."
+        $defaultOwnerId = ($existingById.Values | Group-Object OwnerId | Sort-Object Count -Descending | Select-Object -First 1).Name
+    }
 }
 if (-not $defaultOwnerId) {
     Write-Warning "No existing OwnerId found to use as default. New entries will get an empty OwnerId - fill it in manually if needed."
@@ -270,7 +312,7 @@ foreach ($contentType in $contentTypes) {
 
         $existingEntry = $existingById[$fileId]
 
-        # --- Extract JSON metadata if available ---
+        # --- Check for a custom-map.json in this folder (name/author override) ---
         $customInfo = $null
         $customJsonPath = Join-Path $folderPath "custom-map.json"
         if (Test-Path $customJsonPath) {
@@ -287,7 +329,7 @@ foreach ($contentType in $contentTypes) {
             }
         }
 
-        # --- Compile save files ---
+        # --- Build the Saves array from whatever .bin files actually exist ---
         $saves = New-Object System.Collections.Generic.List[Object]
         foreach ($bin in $binFiles) {
             $saveId = [System.IO.Path]::GetFileNameWithoutExtension($bin.Name)
@@ -310,7 +352,7 @@ foreach ($contentType in $contentTypes) {
             })
         }
 
-        # --- Apply Entry Attributes ---
+        # --- Reuse metadata if the entry already existed, else set defaults ---
         if ($existingEntry) {
             $fileName          = $existingEntry.FileName
             $ownerId           = $existingEntry.OwnerId
@@ -325,6 +367,7 @@ foreach ($contentType in $contentTypes) {
             $logPrefix         = "  NEW:    "
         }
 
+        # --- custom-map.json (if present) wins over everything above for name/author ---
         if ($customInfo) {
             $fileName = "$communityTag $($customInfo.name)"
             if ($customInfo.author) { $authorDisplayName = $customInfo.author }
@@ -345,7 +388,7 @@ foreach ($contentType in $contentTypes) {
     }
 }
 
-# --- Pre-Write Safety Check ---
+# --- Sanity check before overwriting anything ---
 if ($existingById.Count -gt 0 -and $newFiles.Count -lt ($existingById.Count / 2)) {
     Write-Host ""
     Write-Host "[ABORTED] Safety check failed: found only $($newFiles.Count) entries on disk," -ForegroundColor Red
@@ -364,7 +407,7 @@ $manifestObject = [ordered]@{
 $jsonCompact = $manifestObject | ConvertTo-Json -Depth 10 -Compress
 $json = Format-Json -Json $jsonCompact
 
-# --- Backup manifest securely prior to overwrite ---
+# --- Always back up the manifest before touching it (into Backup/, not loose) ---
 if (Test-Path $manifestPath) {
     $backupRoot = Join-Path $root "Backup"
     if (-not (Test-Path $backupRoot)) {
@@ -376,8 +419,9 @@ if (Test-Path $manifestPath) {
     Write-Host "Manifest backup written: $backupPath"
 }
 
-# --- Final JSON Output ---
-[System.IO.File]::WriteAllText($manifestPath, $json, [System.Text.Encoding]::Unicode)
+# Write back using whatever encoding the original file actually had
+# (UTF-16LE with BOM, or plain UTF-8 without one for a brand-new file)
+[System.IO.File]::WriteAllText($manifestPath, $json, $manifestEncoding)
 
 Write-Host ""
 Write-Host "Done. Manifest updated: $manifestPath"

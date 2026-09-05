@@ -5,7 +5,7 @@
 A streamlined, automated utility designed to simplify loading custom maps and prefabs into Splitgate. 
 
 > [!CAUTION]
-> The underlying code for this project was built with the assistance of AI.
+> The underlying code for this project was built by AI.
 
 ## Why is this script needed?
 Adding custom maps to Splitgate manually is notoriously frustrating. Simply dropping a downloaded `.bin` map file into your game directory does not work; the game relies on a strict `CloudSaveManifest.json` file to recognize and list custom content in your menus. Modifying this JSON manually is error-prone and time-consuming. 
