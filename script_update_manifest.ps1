@@ -1,7 +1,7 @@
 # ╔════════════════════════════════════════════════════════════════════════════════════════════════════════[─]═[□]═[×]═╗ 
 # ║ Splitgate-MapLoader                                                                                                ║ 
 # ╠══════════════════════════╦═════════════════════════════════════════════════════════════════════════════════════════╣ 
-# ║ Script:                  ║ update_manifest.ps1                                                                     ║ 
+# ║ Script:                  ║ Update Manifest                                                                         ║ 
 # ║ Version:                 ║ 1.1.0                                                                                   ║ 
 # ║ Author:                  ║ AI                                                                                      ║ 
 # ║ Description:             ║ Scans the MapCreator and MapCreatorPrefab folders, imports staged files safely,         ║ 
