@@ -9,6 +9,9 @@ A streamlined, automated utility designed to simplify loading custom maps and pr
 > [!CAUTION]
 > The underlying code for this project was built by AI.
 
+
+> [!IMPORTANT] Windows only. This tool relies on a .bat/PowerShell script and > Windows-specific paths (%LOCALAPPDATA%), so it won't run on macOS or Linux as-is.
+
 ## Why is this script needed?
 Adding custom maps to Splitgate manually is notoriously frustrating. Simply dropping a downloaded `.bin` map file into your game directory does not make it show up in-game; the game relies on a strict `CloudSaveManifest.json` file to recognize and list custom content in your menus. Modifying this JSON manually is error-prone and time-consuming.
 
@@ -37,7 +40,7 @@ Before using this tool for the first time, **you must have created and saved at 
 * Head to [Splitgate-CommunityMaps](https://splitgate-architects.github.io/Splitgate-CommunityMaps/) and download the `.bin` file(s) for any maps you want to play.
 
 **2. Install the loader**
-* Download `MapLoader.bat` from this repository.
+* Download `MapLoader.bat` from the [latest release](https://github.com/Splitgate-Architects/Splitgate-MapLoader/releases/latest).
 * Open File Explorer, paste the following into the address bar, and press Enter:
   ```
   %LOCALAPPDATA%\PortalWars2\Saved\Cloud\CloudSave
