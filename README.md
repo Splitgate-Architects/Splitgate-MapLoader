@@ -65,3 +65,10 @@ Don't want a map anymore? Just:
 3. Close the window once it finishes.
 
 The map's entry is automatically removed from `CloudSaveManifest.json` - no manual JSON editing required.
+
+## Editing an Imported Map
+Opened a downloaded map in the in-game editor and saved changes? Splitgate keeps
+your edit *and* the original side by side rather than replacing it, which affects
+how uninstalling works for that map. See
+[EDITING-IMPORTED-MAPS.md](EDITING-IMPORTED-MAPS.md) for what happens and how to
+fully remove a map you've edited.
