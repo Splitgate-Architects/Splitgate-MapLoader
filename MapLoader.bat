@@ -129,15 +129,17 @@ function Get-InfoJsonFromBin {
     }
 }
 
-# A flat entry's only Save always uses RelativePath "ContentType/FileId.bin"
-# (2 segments); a native (subfolder) entry's Saves use "ContentType/FileId/SaveId.ext"
-# (3 segments). Used both while scanning and while deciding what the OLD
-# manifest's entries were, so the mirror-delete logic only ever touches the
-# community (flat) tier and never your own native maps.
-function Test-IsFlatEntry {
+# A community (flat) entry always has one Save with SaveId "custom-map" -
+# that's our fixed convention for the flat file's own save slot. This stays
+# true even if a native save gets added to the SAME entry later (which
+# happens when you edit an imported map in-editor: the game adds a new
+# subfolder-based save right into the existing Files[] entry instead of
+# creating a separate one) - so this check, not path-depth, is what decides
+# whether the mirror-delete / OwnerId-sampling logic should touch an entry.
+function Test-IsCommunityEntry {
     param($ManifestEntry)
-    if (-not $ManifestEntry.Saves -or $ManifestEntry.Saves.Count -eq 0) { return $false }
-    return ($ManifestEntry.Saves[0].RelativePath -split '/').Count -eq 2
+    if (-not $ManifestEntry.Saves) { return $false }
+    return ($ManifestEntry.Saves | Where-Object { $_.SaveId -eq "custom-map" }).Count -gt 0
 }
 
 # ╠════ PART 1: Backup ════════════════════════════════════════════════════════════════════════════════════════════════╣
@@ -237,7 +239,7 @@ if (Test-Path $manifestPath) {
 # used to guess your own OwnerId - only subfolder-based native entries count.
 $defaultOwnerId = $null
 if ($existingById.Count -gt 0) {
-    $nativeOwnerIds = @($existingById.Values | Where-Object { -not (Test-IsFlatEntry $_) } | ForEach-Object { $_.OwnerId })
+    $nativeOwnerIds = @($existingById.Values | Where-Object { -not (Test-IsCommunityEntry $_) } | ForEach-Object { $_.OwnerId })
     if ($nativeOwnerIds.Count -gt 0) {
         $defaultOwnerId = ($nativeOwnerIds | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name
     } else {
@@ -266,39 +268,65 @@ foreach ($contentType in $contentTypes) {
         continue
     }
 
-    # --- Native maps: one subfolder per FileId, may contain multiple Saves ---
-    Get-ChildItem -Path $contentDir -Directory | ForEach-Object {
-        $fileId = $_.Name
-        $folderPath = $_.FullName
+    # Collect FileIds from BOTH a native subfolder AND a flat community
+    # .bin - they can be the SAME FileId (this happens when you edit an
+    # imported map in-editor: the game adds the new native save right into
+    # the existing entry instead of creating a separate one). Processing
+    # them together, keyed by FileId, is what avoids ending up with two
+    # Files[] entries sharing one FileId - which the game can't handle
+    # sensibly either way.
+    $nativeFolders = @{}
+    Get-ChildItem -Path $contentDir -Directory | ForEach-Object { $nativeFolders[$_.Name] = $_ }
 
-        $binFiles = Get-ChildItem -Path $folderPath -Filter "*.bin" -File
-        if ($binFiles.Count -eq 0) {
-            Write-Host "  Skipping $fileId (no .bin files inside)"
-            return
+    $flatBins = @{}
+    Get-ChildItem -Path $contentDir -File -Filter "*.bin" | ForEach-Object {
+        $flatBins[[System.IO.Path]::GetFileNameWithoutExtension($_.Name)] = $_
+    }
+
+    $allFileIds = @($nativeFolders.Keys) + @($flatBins.Keys) | Select-Object -Unique
+
+    foreach ($fileId in $allFileIds) {
+        $existingEntry = $existingById[$fileId]
+        $saves = New-Object System.Collections.Generic.List[Object]
+        $hasCommunityComponent = $false
+        $info = $null
+
+        # --- native saves, if a subfolder exists for this FileId ---
+        if ($nativeFolders.ContainsKey($fileId)) {
+            $folderPath = $nativeFolders[$fileId].FullName
+            $binFiles = Get-ChildItem -Path $folderPath -Filter "*.bin" -File
+            foreach ($bin in $binFiles) {
+                $saveId = [System.IO.Path]::GetFileNameWithoutExtension($bin.Name)
+                $relPath = "$contentType/$fileId/$($bin.Name)"
+                $createdAt = $null
+                if ($existingEntry) {
+                    $existingSave = $existingEntry.Saves | Where-Object { $_.SaveId -eq $saveId }
+                    if ($existingSave) { $createdAt = $existingSave.CreatedAt }
+                }
+                if (-not $createdAt) { $createdAt = $bin.LastWriteTimeUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
+                $saves.Add([ordered]@{ SaveId = $saveId; RelativePath = $relPath; SaveType = "Manual"; CreatedAt = $createdAt })
+            }
         }
 
-        $existingEntry = $existingById[$fileId]
-
-        $saves = New-Object System.Collections.Generic.List[Object]
-        foreach ($bin in $binFiles) {
-            $saveId = [System.IO.Path]::GetFileNameWithoutExtension($bin.Name)
-            $relPath = "$contentType/$fileId/$($bin.Name)"
-
-            $createdAt = $null
+        # --- flat community save, if a matching .bin sits directly in the folder ---
+        if ($flatBins.ContainsKey($fileId)) {
+            $hasCommunityComponent = $true
+            $bin = $flatBins[$fileId]
+            $info = Get-InfoJsonFromBin -BinPath $bin.FullName
+            $existingSave = $null
             if ($existingEntry) {
-                $existingSave = $existingEntry.Saves | Where-Object { $_.SaveId -eq $saveId }
-                if ($existingSave) { $createdAt = $existingSave.CreatedAt }
+                $existingSave = $existingEntry.Saves | Where-Object { $_.SaveId -eq "custom-map" } | Select-Object -First 1
             }
-            if (-not $createdAt) {
-                $createdAt = $bin.LastWriteTimeUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-            }
+            $saveCreatedAt = if ($existingSave) { $existingSave.CreatedAt } else { $bin.LastWriteTimeUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
+            $saves.Add([ordered]@{ SaveId = "custom-map"; RelativePath = "$contentType/$($bin.Name)"; SaveType = "Manual"; CreatedAt = $saveCreatedAt })
+        }
 
-            $saves.Add([ordered]@{
-                SaveId       = $saveId
-                RelativePath = $relPath
-                SaveType     = "Manual"
-                CreatedAt    = $createdAt
-            })
+        # A FileId that HAS a flat community save now, or HAD one before (a
+        # "custom-map" Save recorded in the existing manifest), stays
+        # community-origin even if a native save got added alongside it
+        # later - so it stays out of OwnerId sampling either way.
+        if (-not $hasCommunityComponent -and $existingEntry) {
+            $hasCommunityComponent = Test-IsCommunityEntry $existingEntry
         }
 
         if ($existingEntry) {
@@ -306,13 +334,25 @@ foreach ($contentType in $contentTypes) {
             $ownerId           = $existingEntry.OwnerId
             $authorDisplayName = $existingEntry.AuthorDisplayName
             $createdAtTop      = $existingEntry.CreatedAt
-            Write-Host "  Updated (native): $fileId -> '$fileName' ($($binFiles.Count) save(s))"
+            $logAction         = "UPDATED"
         } else {
-            $fileName          = $fileId
+            $fileName          = if ($hasCommunityComponent) { "$communityTag $fileId" } else { $fileId }
             $ownerId           = $defaultOwnerId
             $authorDisplayName = ""
             $createdAtTop      = Get-IsoNow
-            Write-Host "  NEW (native):     $fileId -> '$fileName' ($($binFiles.Count) save(s))"
+            $logAction         = "NEW"
+        }
+
+        # Info.json packed inside the .bin (if present/parseable) wins for name/author
+        if ($info -and $info.name) {
+            $fileName = "$communityTag $($info.name)"
+            if ($info.author) { $authorDisplayName = $info.author }
+        }
+
+        $kind = if ($hasCommunityComponent) { "community" } else { "native" }
+        Write-Host "  $logAction ($kind): $fileId -> '$fileName' ($($saves.Count) save(s))"
+        if ($hasCommunityComponent) {
+            $logLines.Add("$(Get-IsoNow),$contentType,$fileId,$logAction")
         }
 
         $newFiles.Add([ordered]@{
@@ -325,60 +365,12 @@ foreach ($contentType in $contentTypes) {
             Saves             = $saves
         })
     }
-
-    # --- Community maps: flat .bin files sitting directly in the folder ---
-    Get-ChildItem -Path $contentDir -File -Filter "*.bin" | ForEach-Object {
-        $fileId = [System.IO.Path]::GetFileNameWithoutExtension($_.Name)
-        $existingEntry = $existingById[$fileId]
-        $info = Get-InfoJsonFromBin -BinPath $_.FullName
-
-        if ($existingEntry) {
-            $fileName          = $existingEntry.FileName
-            $ownerId           = $existingEntry.OwnerId
-            $authorDisplayName = $existingEntry.AuthorDisplayName
-            $createdAtTop      = $existingEntry.CreatedAt
-            $existingSave      = $existingEntry.Saves | Where-Object { $_.SaveId -eq "custom-map" } | Select-Object -First 1
-            $saveCreatedAt     = if ($existingSave) { $existingSave.CreatedAt } else { $_.LastWriteTimeUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
-            $logAction         = "UPDATED"
-        } else {
-            $fileName          = "$communityTag $fileId"
-            $ownerId           = $defaultOwnerId
-            $authorDisplayName = ""
-            $createdAtTop      = Get-IsoNow
-            $saveCreatedAt     = $_.LastWriteTimeUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-            $logAction         = "NEW"
-        }
-
-        # Info.json packed inside the .bin (if present/parseable) wins for name/author
-        if ($info -and $info.name) {
-            $fileName = "$communityTag $($info.name)"
-            if ($info.author) { $authorDisplayName = $info.author }
-        }
-
-        Write-Host "  $logAction (community): $fileId -> '$fileName'"
-        $logLines.Add("$(Get-IsoNow),$contentType,$fileId,$logAction")
-
-        $newFiles.Add([ordered]@{
-            FileId            = $fileId
-            FileName          = $fileName
-            ContentType       = $contentType
-            OwnerId           = $ownerId
-            AuthorDisplayName = $authorDisplayName
-            CreatedAt         = $createdAtTop
-            Saves             = @([ordered]@{
-                SaveId       = "custom-map"
-                RelativePath = "$contentType/$($_.Name)"
-                SaveType     = "Manual"
-                CreatedAt    = $saveCreatedAt
-            })
-        })
-    }
 }
 
 # --- Log any community maps that disappeared since the last run ---
 $newFileIds = @($newFiles | ForEach-Object { $_.FileId })
 foreach ($old in $existingById.Values) {
-    if ((Test-IsFlatEntry $old) -and ($newFileIds -notcontains $old.FileId)) {
+    if ((Test-IsCommunityEntry $old) -and ($newFileIds -notcontains $old.FileId)) {
         Write-Host "  REMOVED (community): $($old.FileId) - .bin no longer found, dropping it from the manifest"
         $logLines.Add("$(Get-IsoNow),$($old.ContentType),$($old.FileId),REMOVED")
     }
@@ -387,8 +379,8 @@ Write-Host ""
 
 # --- Sanity check: only ever guards your NATIVE maps. Community (flat) maps ---
 # are expected to shrink/grow freely as you add or remove them on purpose.
-$oldNativeCount = @($existingById.Values | Where-Object { -not (Test-IsFlatEntry $_) }).Count
-$newNativeCount = @($newFiles | Where-Object { ($_.Saves[0].RelativePath -split '/').Count -eq 3 }).Count
+$oldNativeCount = @($existingById.Values | Where-Object { -not (Test-IsCommunityEntry $_) }).Count
+$newNativeCount = @($newFiles | Where-Object { -not (Test-IsCommunityEntry $_) }).Count
 if ($oldNativeCount -gt 0 -and $newNativeCount -lt ($oldNativeCount / 2)) {
     Write-Host ""
     Write-Host "[ABORTED] Safety check failed: found only $newNativeCount native map folders," -ForegroundColor Red
