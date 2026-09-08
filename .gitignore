@@ -1,20 +1,19 @@
 # ╔══════════════════════════╗
+# ║ General & Node           ║
+# ╚══════════════════════════╝
+
+node_modules/
+package-lock.json
+.pnpm-store/
+.cache/
+*.log
+
+# ╔══════════════════════════╗
 # ║ Custom                   ║
 # ╚══════════════════════════╝
 
-CommunityMaps
-ConvertedMaps
-
-CloudSaveManifest.json
-
-Backup/* 
-!.gitkeep
-
-MapCreator/* 
-!.gitkeep
-
-MapCreatorPrefab/* 
-!.gitkeep
+.backup/
+.vscode/
 
 # ╔══════════════════════════╗
 # ║ Windows                  ║
