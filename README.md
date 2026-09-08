@@ -1,59 +1,64 @@
-[![YouTube Video](https://raw.githubusercontent.com/CorellanStoma/Splitgate-MapLoader/refs/heads/master/assets/preview.png)](https://youtu.be/Gx70ZBeIltw)
+[![YouTube Video](https://raw.githubusercontent.com/CorellanStoma/Splitgate-MapLoader/refs/heads/master/assets/MapLoader.png)](https://www.youtube.com/watch?v=fHKV-zwphbo)
+
+[Watch the Video Guide](https://www.youtube.com/watch?v=fHKV-zwphbo)
 
 # Splitgate-MapLoader
 
-A streamlined, automated utility designed to simplify loading custom maps and prefabs into Splitgate. 
+A streamlined, automated utility designed to simplify loading custom maps and prefabs into Splitgate.
 
 > [!CAUTION]
 > The underlying code for this project was built by AI.
 
 ## Why is this script needed?
-Adding custom maps to Splitgate manually is notoriously frustrating. Simply dropping a downloaded `.bin` map file into your game directory does not work; the game relies on a strict `CloudSaveManifest.json` file to recognize and list custom content in your menus. Modifying this JSON manually is error-prone and time-consuming. 
+Adding custom maps to Splitgate manually is notoriously frustrating. Simply dropping a downloaded `.bin` map file into your game directory does not make it show up in-game; the game relies on a strict `CloudSaveManifest.json` file to recognize and list custom content in your menus. Modifying this JSON manually is error-prone and time-consuming.
 
-This tool completely automates the process. It safely moves your downloaded maps into the active game directories and perfectly reconstructs the manifest file so the game immediately recognizes your new content. 
+This tool completely automates the process. Drop your `.bin` files straight into the game's own `MapCreator` folder, run the script, and it rebuilds a clean, correctly formatted `CloudSaveManifest.json` so the game immediately recognizes your new content.
 
 ## Features
-* **Safe Staging Environment:** Introduces dedicated `CustomMaps/` and `CustomPrefabs/` folders so you can organize new downloads without directly touching live game files.
-* **Automated Manifest Generation:** Scans your active maps and dynamically rebuilds a clean, correctly formatted `CloudSaveManifest.json`.
-* **Built-in Backups:** Prompts you to back up your existing `MapCreator` folders and manifest before making any changes, saving them to a timestamped `Backup/` directory.
-* **One-Click Execution:** The included batch file bypasses strict PowerShell execution policies automatically, meaning you just double-click and go.
+* **No Staging Folders:** Just drop `.bin` files directly into the live `MapCreator` / `MapCreatorPrefab` folders - no separate import step, no intermediate copying.
+* **Two-Way Sync:** Add a `.bin` file and it's added to the manifest. Delete a `.bin` file and run the script again - it's automatically removed from the manifest too. Your own native maps (the ones you build in the in-game editor) are never touched by this.
+* **Automated Manifest Generation:** Scans your `MapCreator` / `MapCreatorPrefab` folders and dynamically rebuilds a clean, correctly formatted `CloudSaveManifest.json` - matching whatever encoding your manifest already uses.
+* **Built-in Backups:** Prompts you to back up your own native map folders and manifest before making any changes, saving them to a timestamped `Backup/` directory. Downloaded community maps aren't included in the backup since they can always be re-downloaded.
+* **One-Click Execution:** A single `.bat` file - no separate script files to keep track of, and it bypasses strict PowerShell execution policies automatically, meaning you just double-click and go.
 
-## The Standardized Map Format
-To make sharing and organizing maps as clean as possible, this tool encourages a standardized structure for distributing custom maps. Ideally, each published map folder should contain:
+## Where to Get Maps
+Browse, search, and download community-made maps here:
 
-* `custom-map.bin` - The actual map data.
-* `custom-map.json` - A metadata file containing the map name and author. *(If Splitgate has a future in modding, this could be expanded over time.)*
-* `custom-map.jpg` or `.png` *(Optional but recommended)* - A preview image so users know what they are downloading.
+**[Splitgate-CommunityMaps](https://splitgate-architects.github.io/Splitgate-CommunityMaps/)**
 
-**Why use `custom-map.json`?**
-When the script rebuilds your manifest, it reads this metadata to correctly name the map and credit the author. Crucially, the script automatically applies a `[P]` prefix to any map imported using a JSON file. 
+Every map on the site is a ready-to-use `.bin` file with the map name, author, and category already built in - just download and drop it in.
 
-If you are a map creator importing 50+ custom maps, this feature is a lifesaver. The prefix ensures all downloaded public maps are visually separated in your Lab selection menu, preventing them from cluttering up your own original creations.
+## Prerequisite
+Before using this tool for the first time, **you must have created and saved at least one map of your own in the in-game Map Lab.** This is what makes your `OwnerId` show up in `CloudSaveManifest.json` in the first place - the script reads it from there and reuses it for every map you import. Without at least one native map already saved, there's nothing for it to read.
 
 ## How to Install & Use
 
-**1. Installation**
-* Open File Explorer on your PC.
-* In the address bar at the top, paste the following path and press Enter:
-  `%LOCALAPPDATA%\PortalWars2\Saved\Cloud\CloudSave`
-* Copy the `update_manifest.bat` and `update_manifest.ps1` files directly into this `CloudSave` folder.
+**1. Get some maps**
+* Head to [Splitgate-CommunityMaps](https://splitgate-architects.github.io/Splitgate-CommunityMaps/) and download the `.bin` file(s) for any maps you want to play.
 
-**2. Initial Setup**
-* Double-click `update_manifest.bat`. 
-* On the first run, the script will automatically create empty `CustomMaps` and `CustomPrefabs` staging folders and pause to let you add files. 
+**2. Install the loader**
+* Download `MapLoader.bat` from this repository.
+* Open File Explorer, paste the following into the address bar, and press Enter:
+  ```
+  %LOCALAPPDATA%\PortalWars2\Saved\Cloud\CloudSave
+  ```
+* Place `MapLoader.bat` directly into this `CloudSave` folder.
 
-**3. Stage Your Content**
-* Drop your downloaded custom map folders into the new `CustomMaps/` directory. 
-* Ensure each folder contains the map's `.bin` file (and the `custom-map.json` if provided).
+**3. Add your maps**
+* Copy the `.bin` file(s) you downloaded directly into the `MapCreator` folder (for maps) or `MapCreatorPrefab` folder (for prefabs) inside `CloudSave`. No subfolder needed - just the `.bin` file itself.
 
-**4. Run the Importer**
-* Double-click `update_manifest.bat` again. 
+**4. Run the loader**
+* Double-click `MapLoader.bat`.
+* When asked whether to back up your files, it's recommended to type `Y` - this backs up your own native maps and the current manifest into a timestamped `Backup\` folder.
+* Once the script finishes, close the window.
 
-**5. Backup Your Files**
-* The script will ask if you want to back up your current state. It is highly recommended to type `Y`. 
-* This will safely copy your current `MapCreator`, `MapCreatorPrefab`, and `CloudSaveManifest.json` into a timestamped folder (e.g., `Backup\2026-09-04-Backup`).
+**5. Play**
+* Launch Splitgate and open the Lab / Customs menu - your new maps should already be there.
 
-**6. Confirm and Play**
-* Type `Y` to confirm your files are staged. 
-* The tool will automatically merge the maps into the live game directories and generate the new manifest. 
-* Launch Splitgate and enjoy your custom maps!
+## Uninstalling Maps
+Don't want a map anymore? Just:
+1. Delete its `.bin` file from the `MapCreator` (or `MapCreatorPrefab`) folder.
+2. Run `MapLoader.bat` again.
+3. Close the window once it finishes.
+
+The map's entry is automatically removed from `CloudSaveManifest.json` - no manual JSON editing required.
