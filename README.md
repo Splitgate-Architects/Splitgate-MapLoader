@@ -20,6 +20,8 @@ chmod +x MapLoader_v3.1.0_linux.sh
 ./MapLoader_v3.1.0_linux.sh
 ./MapLoader_v3.1.0_linux.sh "/path/to/CloudSave"
 ```
+Language follows your system `LANG` (English, German, Spanish, French). Force one with `--lang de` (or `en`, `es`, `fr`).
+
 Usual location:
 ```
 ~/.local/share/Steam/steamapps/compatdata/<appid>/pfx/drive_c/users/steamuser/AppData/Local/PortalWars2/Saved/Cloud/CloudSave
