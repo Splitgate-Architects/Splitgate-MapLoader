@@ -10,7 +10,22 @@ A streamlined, automated utility designed to simplify loading custom maps and pr
 > The underlying code for this project was built by AI.
 
 
-> [!IMPORTANT] Windows only. This tool relies on a .bat/PowerShell script and > Windows-specific paths (%LOCALAPPDATA%), so it won't run on macOS or Linux as-is.
+> [!NOTE]
+> Windows uses the `.bat` file. Linux (and macOS) use `MapLoader_v3.1.0_linux.sh`, which needs `python3`.
+
+## Linux
+Splitgate runs through Proton, so the game folder lives inside the Steam prefix. The script finds it by itself, or you can pass the path:
+```
+chmod +x MapLoader_v3.1.0_linux.sh
+./MapLoader_v3.1.0_linux.sh
+./MapLoader_v3.1.0_linux.sh "/path/to/CloudSave"
+```
+Language follows your system `LANG` (English, German, Spanish, French). Force one with `--lang de` (or `en`, `es`, `fr`).
+
+Usual location:
+```
+~/.local/share/Steam/steamapps/compatdata/<appid>/pfx/drive_c/users/steamuser/AppData/Local/PortalWars2/Saved/Cloud/CloudSave
+```
 
 ## Why is this script needed?
 Adding custom maps to Splitgate manually is notoriously frustrating. Simply dropping a downloaded `.bin` map file into your game directory does not make it show up in-game; the game relies on a strict `CloudSaveManifest.json` file to recognize and list custom content in your menus. Modifying this JSON manually is error-prone and time-consuming.
